@@ -1,0 +1,10 @@
+This module alters the Drupal page flow so that users (regardless of login state)
+will ALWAYS recieve the anonymous-cached version of the page.
+
+Once loaded, an AJAX request is sent off for an uncached version of the page which
+is then shown to the user to allow all customised content to be available.
+
+This follows the same principles as ESI without the one-request-per-block issue
+that it creates.
+
+This is a trade-off between "initial speed" and "page displaying corretly always"
