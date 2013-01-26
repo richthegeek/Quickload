@@ -1,0 +1,83 @@
+<?php
+
+/**
+ * Returns a boolean wether this page can be loaded from the quickcache based on certain conditions.
+ *  1. if it's an admin page
+ *  2. if the request has a "nocache" parameter
+ *  3. if it is not a GET request
+ *  4. if it is from the CLI
+ *  5. if a module implementing "quickload_should_cache" returns false
+ *      NOTE: modules implementing hook_quickload_should_cache MUST also
+ *            implement hook_boot so as to load during the bootstrap, or
+ *            the hook will not run.
+ *      NOTE: return value is interpreted as boolean, "false" meaning "Do not use quickload"
+ *  6. if the "page cache without db" var is false
+ *  7. if the "cache" variable is false
+ */
+function quickload_can_cache() {
+  if (arg(0) == 'admin' || isset($_GET['nocache']) || $_SERVER['REQUEST_METHOD'] != 'GET' || drupal_is_cli()) {
+    return false;
+  }
+  foreach (module_implements('quickload_should_cache') as $module) {
+    if (module_invoke('quickload_should_cache') != TRUE) {
+      return false;
+    }
+  }
+  // Check for a cache mode force from settings.php.
+  if (!variable_get('page_cache_without_database', true)) {
+    return false;
+  }
+  else {
+    drupal_bootstrap(DRUPAL_BOOTSTRAP_VARIABLES, FALSE);
+    if (!$c = variable_get('cache')) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Implements hook_boot().
+ */
+function quickload_boot() {
+
+  if (!quickload_can_cache()) {
+    header('X-Drupal-QCache: IGNORE');
+    return true;
+  }
+
+  // copied mostly from _drupal_bootstrap_page_cache
+  // Allow specifying special cache handlers in settings.php, like
+  // using memcached or files for storing cache information.
+  require_once DRUPAL_ROOT . '/includes/cache.inc';
+  foreach (variable_get('cache_backends', array()) as $include) {
+    require_once DRUPAL_ROOT . '/' . $include;
+  }
+  drupal_block_denied(ip_address());
+  // Make sure there is a user object because its timestamp will be
+  // checked, hook_boot might check for anonymous user etc.
+  // Get the page from the cache.
+  global $base_root;
+  $cache = cache_get($base_root . request_uri(), 'cache_page');
+  // If there is a cached page, display it.
+  if (is_object($cache)) {
+    header('X-Drupal-QCache: HIT');
+    // Restore the metadata cached with the page.
+    $_GET['q'] = $cache->data['path'];
+    drupal_set_title($cache->data['title'], PASS_THROUGH);
+    date_default_timezone_set(drupal_get_user_timezone());
+    drupal_serve_page_from_cache($cache);
+
+    $path = str_replace(DRUPAL_ROOT, '', dirname(__FILE__));
+    print '<script type="text/javascript" src="' . $path . '/quickload.js' . '"></script>';
+
+    // If the skipping of the bootstrap hooks is not enforced, call
+    // hook_exit.
+    // bootstrap_invoke_all('exit');
+    // We are done.
+    exit(0);
+  }
+  else {
+    header('X-Drupal-QCache: MISS');
+  }
+}
