@@ -2,6 +2,7 @@
 
 /**
  * Returns a boolean wether this page can be loaded from the quickcache based on certain conditions.
+ *  0. if the "has_js" cookie is not set (this is set by quickload.js as a fallback)
  *  1. if it's an admin page
  *  2. if the request has a "nocache" parameter
  *  3. if it is not a GET request
@@ -15,7 +16,7 @@
  *  7. if the "cache" variable is false
  */
 function quickload_can_cache() {
-  if (arg(0) == 'admin' || isset($_GET['nocache']) || $_SERVER['REQUEST_METHOD'] != 'GET' || drupal_is_cli()) {
+  if (!isset($_COOKIE['has_js']) || arg(0) == 'admin' || isset($_GET['nocache']) || $_SERVER['REQUEST_METHOD'] != 'GET' || drupal_is_cli()) {
     return false;
   }
   foreach (module_implements('quickload_should_cache') as $module) {
